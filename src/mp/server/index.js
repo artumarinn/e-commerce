@@ -4,7 +4,7 @@ import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 // Configurar el cliente de MercadoPago
 const client = new MercadoPagoConfig({
-    accessToken: 'TUEST-4070552816955589-010911-e2e74ed26d97868e7dbe8f84653e769d-248808759'
+    accessToken: process.env.ACCESS_TOKEN,
 });
 
 const app = express();

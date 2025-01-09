@@ -46,7 +46,7 @@ function Cart({ sendLaunch, launch }) {
     };
 
     const renderMercadoPagoButton = (preferenceId) => {
-        const mp = new MercadoPago("TEST-b6d362cd-f2ea-4d15-a170-9f83d1dfe525", {
+        const mp = new MercadoPago(process.env.PUBLIC_KEY, {
             locale: "es-AR",
         });
 
