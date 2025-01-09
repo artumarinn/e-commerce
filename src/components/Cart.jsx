@@ -1,154 +1,98 @@
-import {
-    useState,
-    useEffect
-} from 'react';
-import {useNavigate} from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { useSelector, useDispatch } from "react-redux";
 import Button from 'react-bootstrap/Button';
 import Offcanvas from 'react-bootstrap/Offcanvas';
 import ListGroup from 'react-bootstrap/ListGroup';
-import "/src/assets/styles/Cart.css";
-import {Trash} from "react-bootstrap-icons";
 import axios from "axios";
-import getConfig from "/src/utils/getConfig";
-import {
-    useSelector,
-    useDispatch
-} from "react-redux";
-import {
-    getCartProductsThunk,
-    removeCartProductThunk,
-    updateCartProductThunk
-} from "/src/store/slices/cartProducts.slice";
-import {addUserPurchaseThunk} from "/src/store/slices/userPurchases.slice";
-import {setIsLoading} from "/src/store/slices/isLoading.slice";
-import {setCartProducts} from "/src/store/slices/cartProducts.slice";
+import { Trash } from "react-bootstrap-icons";
+import "/src/assets/styles/Cart.css";
+import { getCartProductsThunk, removeCartProductThunk, updateCartProductThunk } from "/src/store/slices/cartProducts.slice";
 
-function Cart({
-    sendLaunch,
-    launch
-})
-{
+function Cart({ sendLaunch, launch }) {
     const [total, setTotal] = useState(0);
-    const [products, setProducts] = useState([]);
+    const [preferenceId, setPreferenceId] = useState(null);
     const cartProducts = useSelector(state => state.cartProducts);
-    const getProducts = useSelector(state => state.getProducts);
     const dispatch = useDispatch();
-    const navigate = useNavigate();
 
     useEffect(() => {
         dispatch(getCartProductsThunk());
     }, []);
 
     useEffect(() => {
-	prepareProducts();
-        setTotal(cartProducts.reduce((accum, currentValue) => accum + (Number(currentValue.price)*currentValue.productsInCart.quantity), 0));
+        setTotal(cartProducts.reduce((acc, product) => 
+            acc + (Number(product.price) * product.productsInCart.quantity), 0
+        ));
     }, [cartProducts]);
 
-    const dropProduct = id => {
-	dispatch(setIsLoading(true));
-        axios
-	    .delete("https://e-commerce-api.academlo.tech/api/v1/cart/" + id, getConfig())
-	    .then(res => dispatch(getCartProductsThunk()))
-	    .catch(err => console.log(err.response))
-	    .finally(() => dispatch(setIsLoading(false)));
-    }
+    const handleCheckout = async () => {
+        try {
+            const orderData = cartProducts.map(product => ({
+                title: product.title,
+                quantity: product.productsInCart.quantity,
+                unit_price: Number(product.price),
+            }));
 
-    const handleClose = () => sendLaunch(false);
+            const response = await axios.post("http://localhost:3001/api/create_preference", {
+                items: orderData,
+            });
 
-    const handlePurchase = url => {
-	dispatch(addUserPurchaseThunk({}));
-	cleanCart();
-        handleNavigate(url)
-    }
+            const { id } = response.data;
+            setPreferenceId(id);
+            renderMercadoPagoButton(id);
+        } catch (error) {
+            console.error("Error creating preference:", error);
+            alert("Failed to create payment preference");
+        }
+    };
 
-    const handleNavigate = url => {
-        navigate(url);
-	handleClose();
-    }
+    const renderMercadoPagoButton = (preferenceId) => {
+        const mp = new MercadoPago("TEST-b6d362cd-f2ea-4d15-a170-9f83d1dfe525", {
+            locale: "es-AR",
+        });
 
-    const cleanCart = () => {
-        const ids = cartProducts.map(product => product.id);
-	ids.forEach(id => dropProduct(id));
-	dispatch(setCartProducts([]));
-    }
+        const bricksBuilder = mp.bricks();
 
-    const prepareProducts = () => {
-	if(getProducts)
-	{
-            setProducts(cartProducts.map(product => {
-                const productImgs = getProducts?.find(getProduct => getProduct.id === product.id).productImgs;
-	        return {
-                    ...product,
-	            productImgs
-	        };
-	    }));
-	}
-    }
+        const renderComponent = async () => {
+            if (window.wallet) window.wallet.unmount();
+            window.wallet = await bricksBuilder.create("wallet", "wallet_container", {
+                initialization: {
+                    preferenceId,
+                },
+                customization: {
+                    texts: {
+                        valueProp: "smart_option",
+                    },
+                },
+            });
+        };
 
-    const handleUpdateQuantity = (operation, product) => {
-        let newQuantity = product.productsInCart.quantity;
+        renderComponent();
+    };
 
-	if(operation == "subs")
-	{
-            newQuantity--;
-	}else if(operation == "add")
-	{
-            newQuantity++;
-	}
-
-	dispatch(updateCartProductThunk(product.id, newQuantity));
-    }
-    
     return (
-        <Offcanvas show={launch} onHide={handleClose} placement="end">
+        <Offcanvas show={launch} onHide={() => sendLaunch(false)} placement="end">
             <Offcanvas.Header closeButton>
                 <Offcanvas.Title>Cart</Offcanvas.Title>
             </Offcanvas.Header>
             <Offcanvas.Body>
-	        <ListGroup variant="flush">
-	            {
-                        products.map((product, index) => {
-                            return (
-				<ListGroup.Item 
-				    id="card-item"
-				    key={index}
-				>
-				    <span id="quantity">{product.productsInCart.quantity}</span>
-				    <div id="item-data"><figure
-				        id="card-img"
-				        onClick={() => handleNavigate(`/product/${product.id}`)}
-				    >
-				    <img src={product?.productImgs[0]} alt={`This is a ${product.titel} image`}/>
-					<figcaption>{product.titel}</figcaption>
-				        <span>Price</span><span>{`$${product.price}`}</span>
-				    </figure>
-				    <span
-				        id="substract-product"
-				        onClick={() => handleUpdateQuantity("subs", product)}
-				    >-</span>
-				    <span
-				        id="add-product"
-				        onClick={() => handleUpdateQuantity("add", product)}
-				    >+</span>
-				    <span
-				        id="card-trash"
-                                        onClick={() => dispatch(removeCartProductThunk(product.id))}
-				    >
-				        <Trash id="trash"/>
-				    </span></div>
-				</ListGroup.Item>
-			    );
-			})
-		    }
+                <ListGroup variant="flush">
+                    {cartProducts.map((product, index) => (
+                        <ListGroup.Item key={index}>
+                            <span>{product.productsInCart.quantity}</span>
+                            <div>
+                                <span>{product.title}</span>
+                                <span>{`$${product.price}`}</span>
+                                <Trash onClick={() => dispatch(removeCartProductThunk(product.id))} />
+                            </div>
+                        </ListGroup.Item>
+                    ))}
                 </ListGroup>
-		<div id="cart-total">
-	            <span>Total</span><span>{`$${total}`}</span>
-		</div>
-	        <Button
-	            id="cart-checkout"
-	            variant="primary"
-	            onClick={() => handlePurchase("/purchases")}
-	        >Buy</Button>
+                <div>
+                    <span>Total:</span>
+                    <span>{`$${total}`}</span>
+                </div>
+                <Button variant="primary" onClick={handleCheckout}>Buy</Button>
+                <div id="wallet_container"></div>
             </Offcanvas.Body>
         </Offcanvas>
     );
